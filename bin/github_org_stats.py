@@ -240,58 +240,107 @@ class GitHubOrgStats:
         return stats
 
 def process():
-    ''' Get and displayGitHub organization statistics
+    ''' Get and display GitHub organization statistics for one or more organizations,
+        combining statistics across all specified organizations
         Keyword arguments:
           None
         Returns:
           None
     '''
     try:
-        stats = GitHubOrgStats(ARG.TOKEN, ARG.ORG)
-        stats.days = ARG.DAYS
-        report = stats.generate_report()
-        # Print report
-        print(f"\nStatistics for {ARG.ORG}")
-        print("-" * 80)
-        print(f"Total Repositories: {report['total_repos']:,}")
-        print(f"Total Members:      {report['total_members']:,}")
-        print(f"Total Stars:        {report['total_stars']:,}")
-        print(f"Total Forks:        {report['total_forks']:,}")
-        print(f"Total Issues:       {report['total_issues']:,}")
+        # Split organizations into a list
+        organizations = [org.strip() for org in ARG.ORG.split(',')]
+        
+        # Initialize combined stats
+        combined_report = {
+            'total_repos': 0,
+            'total_members': 0,
+            'total_stars': 0,
+            'total_forks': 0,
+            'total_issues': 0,
+            'new_stars': 0,
+            'new_forks': 0,
+            'new_issues': 0,
+            'pull_requests': {'total': 0, 'open': 0, 'closed': 0, 'merged': 0},
+            'contributors': defaultdict(int),
+            'merge_times': []
+        }
+        
+        # Process each organization and combine stats
+        for org in organizations:
+            stats = GitHubOrgStats(ARG.TOKEN, org)
+            stats.days = ARG.DAYS
+            report = stats.generate_report()
+            
+            # Combine statistics
+            combined_report['total_repos'] += report['total_repos']
+            combined_report['total_members'] += report['total_members']
+            combined_report['total_stars'] += report['total_stars']
+            combined_report['total_forks'] += report['total_forks']
+            combined_report['total_issues'] += report['total_issues']
+            combined_report['new_stars'] += report['new_stars']
+            combined_report['new_forks'] += report['new_forks']
+            combined_report['new_issues'] += report['new_issues']
+            combined_report['pull_requests']['total'] += report['pull_requests']['total']
+            combined_report['pull_requests']['open'] += report['pull_requests']['open']
+            combined_report['pull_requests']['closed'] += report['pull_requests']['closed']
+            combined_report['pull_requests']['merged'] += report['pull_requests']['merged']
+            
+            # Combine contributor stats
+            for contributor, count in report['contributors'].items():
+                combined_report['contributors'][contributor] += count
+            
+            # Collect merge times for average calculation
+            if report['pull_requests'].get('avg_time_to_merge'):
+                merged_count = report['pull_requests']['merged']
+                avg_time = report['pull_requests']['avg_time_to_merge']
+                combined_report['merge_times'].extend([avg_time] * merged_count)
+        
+        # Calculate combined average merge time
+        if combined_report['merge_times']:
+            combined_report['pull_requests']['avg_time_to_merge'] = sum(combined_report['merge_times']) / len(combined_report['merge_times'])
+        
+        # Print combined report
+        print(f"\nCombined Statistics for Organizations: {', '.join(organizations)}")
+        print("=" * 80)
+        print(f"Total Repositories: {combined_report['total_repos']:,}")
+        print(f"Total Members:      {combined_report['total_members']:,}")
+        print(f"Total Stars:        {combined_report['total_stars']:,}")
+        print(f"Total Forks:        {combined_report['total_forks']:,}")
+        print(f"Total Issues:       {combined_report['total_issues']:,}")
 
         print(f"\nActivity (last {ARG.DAYS} days):")
-        print(f"New Stars:  {report['new_stars']:,}")
-        print(f"New Forks:  {report['new_forks']:,}")
-        print(f"New Issues: {report['new_issues']:,}")
+        print(f"New Stars:  {combined_report['new_stars']:,}")
+        print(f"New Forks:  {combined_report['new_forks']:,}")
+        print(f"New Issues: {combined_report['new_issues']:,}")
 
         print(f"\nPull Request statistics (last {ARG.DAYS} days):")
-        print(f"  Total PRs:  {report['pull_requests']['total']:,}")
+        print(f"  Total PRs:  {combined_report['pull_requests']['total']:,}")
 
-        total = report['pull_requests']['total']
+        total = combined_report['pull_requests']['total']
         if total > 0:
-            open_pct = (report['pull_requests']['open'] / total) * 100
-            closed_pct = (report['pull_requests']['closed'] / total) * 100
-            merged_pct = (report['pull_requests']['merged'] / total) * 100
-            print(f"  Opened PRs: {report['pull_requests']['open']:,} ({open_pct:.1f}%)")
-            print(f"  Closed PRs: {report['pull_requests']['closed']:,} ({closed_pct:.1f}%)")
-            print(f"  Merged PRs: {report['pull_requests']['merged']:,} ({merged_pct:.1f}%)")
+            open_pct = (combined_report['pull_requests']['open'] / total) * 100
+            closed_pct = (combined_report['pull_requests']['closed'] / total) * 100
+            merged_pct = (combined_report['pull_requests']['merged'] / total) * 100
+            print(f"  Opened PRs: {combined_report['pull_requests']['open']:,} ({open_pct:.1f}%)")
+            print(f"  Closed PRs: {combined_report['pull_requests']['closed']:,} ({closed_pct:.1f}%)")
+            print(f"  Merged PRs: {combined_report['pull_requests']['merged']:,} ({merged_pct:.1f}%)")
         else:
             print("  Opened PRs: 0")
             print("  Closed PRs: 0")
             print("  Merged PRs: 0")
-        if report['pull_requests']['avg_time_to_merge']:
-            hours = report['pull_requests']['avg_time_to_merge']
+
+        if combined_report['pull_requests'].get('avg_time_to_merge'):
+            hours = combined_report['pull_requests']['avg_time_to_merge']
             days = hours / 24
             print(f"  Average Time to Merge: {days:.1f} days ({hours:.1f} hours)")
-        if report['contributors']:
+
+        if combined_report['contributors']:
             print(f"\nActive contributors (Last {ARG.DAYS} days):")
-            for author, count in sorted(report['contributors'].items(),
+            for author, count in sorted(combined_report['contributors'].items(),
                                      key=lambda x: (-x[1], x[0])):  # Sort by count desc, then name
                 print(f"  {author}: {count} PR" + ("s" if count != 1 else ""))
-        # I'm not convinced this is useful
-        # print("\nLanguages used:")
-        # for lang, count in sorted(report['languages'].items(), key=lambda x: x[1], reverse=True):
-        #     print(f"  {lang}: {count} repositories")
+
     except Exception as e:
         print(f"Error: {str(e)}")
 
@@ -299,7 +348,7 @@ def process():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GitHub Organization Statistics')
     parser.add_argument('--org', dest='ORG', default='JaneliaSciComp',
-                        help='GitHub organization name')
+                        help='Comma-separated list of GitHub organization names')
     parser.add_argument('--token', dest='TOKEN', default=os.environ.get('GITHUB_TOKEN'),
                         help='GitHub API token')
     parser.add_argument('--days', dest='DAYS', type=int, default=7,
