@@ -18,7 +18,7 @@ ARG = None
 
 class GitHubOrgStats:
     ''' GitHub organization statistics
-        Ititilization:
+        Initialization:
           token -- GitHub API token
           org_name -- GitHub organization name
           days -- Number of days to look back
@@ -239,6 +239,7 @@ class GitHubOrgStats:
         client.close()
         return stats
 
+
 def process():
     ''' Get and display GitHub organization statistics for one or more organizations,
         combining statistics across all specified organizations
@@ -273,19 +274,11 @@ def process():
             report = stats.generate_report()
             
             # Combine statistics
-            combined_report['total_repos'] += report['total_repos']
-            combined_report['total_members'] += report['total_members']
-            combined_report['total_stars'] += report['total_stars']
-            combined_report['total_forks'] += report['total_forks']
-            combined_report['total_issues'] += report['total_issues']
-            combined_report['new_stars'] += report['new_stars']
-            combined_report['new_forks'] += report['new_forks']
-            combined_report['new_issues'] += report['new_issues']
-            combined_report['pull_requests']['total'] += report['pull_requests']['total']
-            combined_report['pull_requests']['open'] += report['pull_requests']['open']
-            combined_report['pull_requests']['closed'] += report['pull_requests']['closed']
-            combined_report['pull_requests']['merged'] += report['pull_requests']['merged']
-            
+            for attr in ['total_repos', 'total_members', 'total_stars', 'total_forks',
+                         'total_issues', 'new_stars', 'new_forks', 'new_issues']:
+                combined_report[attr] += report[attr]
+            for attr in ['total', 'open', 'closed', 'merged']:
+                combined_report['pull_requests'][attr] += report['pull_requests'][attr]
             # Combine contributor stats
             for contributor, count in report['contributors'].items():
                 combined_report['contributors'][contributor] += count
